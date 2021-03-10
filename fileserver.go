@@ -2554,6 +2554,7 @@ func (this *Server) upload(w http.ResponseWriter, r *http.Request) {
 					os.Remove(DOCKER_DIR + fileInfo.Path + "/" + fileInfo.Name)
 				}
 				if output == "json" || output == "json2" {
+					go this.webhook(fileResult)
 					if output == "json2" {
 						result.Data = fileResult
 						result.Status = "ok"
@@ -2605,6 +2606,7 @@ func (this *Server) upload(w http.ResponseWriter, r *http.Request) {
 		fileResult = this.BuildFileResult(&fileInfo, r)
 
 		if output == "json" || output == "json2" {
+			go this.webhook(fileResult)
 			if output == "json2" {
 				result.Data = fileResult
 				result.Status = "ok"
@@ -2631,6 +2633,7 @@ func (this *Server) upload(w http.ResponseWriter, r *http.Request) {
 			fileResult = this.BuildFileResult(v, r)
 			result.Data = fileResult
 			result.Status = "ok"
+			go this.webhook(fileResult)
 		}
 		if output == "json" || output == "json2" {
 			if data, err = json.Marshal(fileResult); err != nil {
@@ -2649,6 +2652,30 @@ func (this *Server) upload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+func (this *Server) webhook(result FileResult) {
+	authurl := Config().AuthUrl
+	if authurl != "" {
+		url := authurl + "/hook"
+		if authurl[len(authurl)-1] == '/' {
+			url = authurl + "hook"
+		}
+		req := httplib.Post(url)
+		req.Param("domain", result.Domain)
+		req.Param("md5", result.Md5)
+		req.Param("modtime", fmt.Sprint(result.ModTime))
+		req.Param("path", result.Path)
+		req.Param("scene", result.Scene)
+		req.Param("size", fmt.Sprint(result.Size))
+		req.Param("src", result.Src)
+		req.Param("url", result.Url)
+
+		_, err := req.DoRequest()
+		if err != nil {
+			log.Error(err.Error())
+		}
+	}
+}
+
 func (this *Server) SaveSmallFile(fileInfo *FileInfo) error {
 	var (
 		err      error
@@ -3525,6 +3552,7 @@ func (this *Server) ListDir(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(this.util.JsonEncodePretty(result)))
 	return
 }
+
 func (this *Server) VerifyGoogleCode(secret string, code string, discrepancy int64) bool {
 	var (
 		goauth *googleAuthenticator.GAuth
